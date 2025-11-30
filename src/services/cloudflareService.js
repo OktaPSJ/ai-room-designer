@@ -7,17 +7,45 @@ const VISION_MODEL = '@cf/meta/llama-3.2-11b-vision-instruct';
 const IMAGE_MODEL = '@cf/stabilityai/stable-diffusion-xl-base-1.0';
 
 /**
- * Convert image file to base64
+ * Compress and resize image to reduce payload size
  */
-async function fileToBase64(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const base64Data = reader.result.split(',')[1];
-            resolve(base64Data);
+async function compressImage(file, maxWidth = 800, quality = 0.7) {
+    return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+
+        img.onload = () => {
+            // Calculate new dimensions
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+                height = (height * maxWidth) / width;
+                width = maxWidth;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+
+            // Draw and compress
+            ctx.drawImage(img, 0, 0, width, height);
+
+            canvas.toBlob(
+                (blob) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        const base64 = reader.result.split(',')[1];
+                        resolve(base64);
+                    };
+                    reader.readAsDataURL(blob);
+                },
+                'image/jpeg',
+                quality
+            );
         };
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
+
+        img.src = URL.createObjectURL(file);
     });
 }
 
@@ -106,7 +134,8 @@ export async function analyzeRoom(imageFile, roomStyle, customContext = '') {
     }
 
     try {
-        const base64Image = await fileToBase64(imageFile);
+        // Compress image to reduce payload size
+        const base64Image = await compressImage(imageFile, 800, 0.7);
         const imageArray = base64ToUint8Array(base64Image);
 
         const prompt = `Kamu adalah desainer interior profesional. Analisis foto ruangan ini dan berikan saran desain dengan gaya ${roomStyle}.
@@ -160,7 +189,7 @@ Berikan saran praktis untuk gaya ${roomStyle}.`;
         const result = await visionResponse.json();
 
         if (!visionResponse.ok) {
-            throw new Error(result.errors?.[0]?.message || 'Failed to analyze image');
+            throw new Error(result.errors?.[0]?.message || result.error || 'Failed to analyze image');
         }
 
         return {
