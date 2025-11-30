@@ -1,7 +1,7 @@
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
-// Using Gemini 2.0 Flash for fast and free vision analysis
-const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent';
+// Using Gemini 2.0 Flash Experimental for image generation
+const API_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent';
 
 /**
  * Convert image file to base64
@@ -27,11 +27,6 @@ function getMimeType(file) {
 }
 
 export async function analyzeRoom(imageFile, roomStyle, customContext = '') {
-    console.log('=== DEBUG: Gemini analyzeRoom called ===');
-    console.log('API_KEY exists:', !!API_KEY);
-    console.log('Room Style:', roomStyle);
-    console.log('Image file:', imageFile?.name, imageFile?.size, 'bytes');
-
     if (!API_KEY) {
         throw new Error('Gemini API key not configured. Please check VITE_GEMINI_API_KEY in .env');
     }
@@ -40,64 +35,35 @@ export async function analyzeRoom(imageFile, roomStyle, customContext = '') {
         const base64Image = await fileToBase64(imageFile);
         const mimeType = getMimeType(imageFile);
 
-        console.log('=== DEBUG: Image converted ===');
-        console.log('Base64 length:', base64Image.length);
-        console.log('MIME type:', mimeType);
+        const prompt = `Kamu adalah seorang desainer interior profesional. Lihat foto ruangan ini dan buatkan visualisasi desain ulang ruangan dengan gaya ${roomStyle}.
 
-        const prompt = `Kamu adalah seorang desainer interior profesional. Analisis foto ruangan ini dan berikan saran desain interior dengan gaya ${roomStyle}.
-${customContext ? `Permintaan khusus pengguna: ${customContext}\n` : ''}
+${customContext ? `Permintaan khusus: ${customContext}\n` : ''}
 
-Berikan rekomendasi detail dalam format berikut:
+PENTING: Generate gambar visualisasi ruangan yang sudah di-redesign dengan gaya ${roomStyle}. Tunjukkan bagaimana ruangan akan terlihat setelah di-desain ulang dengan furnitur, warna, dan dekorasi yang sesuai dengan gaya ${roomStyle}.
 
-**Penilaian Keseluruhan:**
-[Deskripsi singkat kondisi ruangan saat ini]
-
-**Palet Warna:**
-- Warna utama: [sebutkan warna dengan kode hex]
-- Warna aksen: [sebutkan warna dengan kode hex]
-
-**Rekomendasi Furnitur:**
-1. [Item] - [Penempatan dan alasan]
-2. [Item] - [Penempatan dan alasan]
-3. [Item] - [Penempatan dan alasan]
-
-**Dekorasi & Pencahayaan:**
-- [Saran dekorasi]
-- [Saran pencahayaan]
-
-**Tips Hemat Budget:**
-- [Tips 1]
-- [Tips 2]
-
-Berikan saran yang praktis dan spesifik untuk gaya ${roomStyle}. Jawab dalam Bahasa Indonesia.`;
+Setelah gambar, berikan penjelasan singkat dalam Bahasa Indonesia tentang:
+1. Palet warna yang digunakan
+2. Furnitur utama yang ditambahkan
+3. Tips dekorasi`;
 
         const requestBody = {
             contents: [{
                 parts: [
                     { text: prompt },
                     {
-                        inline_data: {
-                            mime_type: mimeType,
+                        inlineData: {
+                            mimeType: mimeType,
                             data: base64Image
                         }
                     }
                 ]
             }],
             generationConfig: {
+                responseModalities: ["TEXT", "IMAGE"],
                 temperature: 0.7,
-                topK: 40,
-                topP: 0.95,
-                maxOutputTokens: 1024,
-            },
-            safetySettings: [
-                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-            ]
+                maxOutputTokens: 2048,
+            }
         };
-
-        console.log('=== DEBUG: Sending request to Gemini ===');
 
         const response = await fetch(`${API_URL}?key=${API_KEY}`, {
             method: 'POST',
@@ -107,32 +73,47 @@ Berikan saran yang praktis dan spesifik untuk gaya ${roomStyle}. Jawab dalam Bah
             body: JSON.stringify(requestBody),
         });
 
-        console.log('=== DEBUG: Response received ===');
-        console.log('Response status:', response.status);
-
         const result = await response.json();
-        console.log('=== DEBUG: Full API Response ===');
-        console.log(JSON.stringify(result, null, 2));
 
         if (!response.ok) {
+            // Handle rate limit error
+            if (response.status === 429) {
+                throw new Error('Terlalu banyak permintaan. Silakan tunggu 1 menit dan coba lagi.');
+            }
             throw new Error(result.error?.message || 'Failed to analyze image');
         }
 
-        // Extract text from Gemini response
-        const suggestions = result.candidates?.[0]?.content?.parts?.[0]?.text || 'No response from AI';
+        // Extract text and image from Gemini response
+        let suggestions = '';
+        let generatedImage = null;
 
-        console.log('=== DEBUG: Extracted suggestions ===');
-        console.log('Suggestions length:', suggestions.length);
+        const parts = result.candidates?.[0]?.content?.parts || [];
+
+        for (const part of parts) {
+            if (part.text) {
+                suggestions += part.text;
+            }
+            if (part.inlineData) {
+                generatedImage = {
+                    data: part.inlineData.data,
+                    mimeType: part.inlineData.mimeType || 'image/png'
+                };
+            }
+        }
+
+        if (!suggestions && !generatedImage) {
+            suggestions = 'No response from AI';
+        }
 
         return {
             success: true,
             suggestions: suggestions,
+            generatedImage: generatedImage,
             style: roomStyle,
         };
 
     } catch (error) {
-        console.error('=== DEBUG: Error ===');
-        console.error('Error:', error);
+        console.error('Analysis error:', error);
         throw new Error(`AI Analysis Failed: ${error.message}`);
     }
 }

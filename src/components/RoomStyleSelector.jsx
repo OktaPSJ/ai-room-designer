@@ -174,12 +174,14 @@ const styles = {
         width: '100%',
         height: '180px',
         overflow: 'hidden',
-        background: 'var(--color-bg-tertiary)',
+        background: '#f0f0f0',
+        display: 'block',
     },
     image: {
         width: '100%',
         height: '100%',
         objectFit: 'cover',
+        display: 'block',
     },
     cardContent: {
         padding: 'var(--space-lg)',
