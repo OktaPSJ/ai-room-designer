@@ -5,7 +5,7 @@ import RoomStyleSelector from './RoomStyleSelector';
 import AIResultDisplay from './AIResultDisplay';
 import AdPlaceholder from './AdPlaceholder';
 import { getRemainingUploads, canUpload, incrementUsage, getDailyLimit } from '../utils/usageTracker';
-import { analyzeRoom, isApiKeyConfigured } from '../services/cloudflareService';
+import { analyzeRoom, isApiKeyConfigured } from '../services/openaiService';
 
 // Modal component untuk limit reached
 function LimitReachedModal({ isOpen, onClose, language }) {
