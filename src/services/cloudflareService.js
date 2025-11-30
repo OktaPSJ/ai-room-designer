@@ -35,21 +35,6 @@ function base64ToUint8Array(base64) {
 }
 
 /**
- * Convert blob to base64
- */
-function blobToBase64(blob) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-            const base64 = reader.result.split(',')[1];
-            resolve(base64);
-        };
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-    });
-}
-
-/**
  * Generate room design image using Stable Diffusion
  */
 async function generateRoomImage(roomStyle) {
@@ -60,14 +45,15 @@ async function generateRoomImage(roomStyle) {
     try {
         const imagePrompt = `Interior design photograph of a ${roomStyle} style living room, professional interior photography, high quality, 8k, realistic lighting, modern furniture, elegant decor, architectural digest style, wide angle shot`;
 
+        // Use Vercel API route in production, Vite proxy in development
         const apiUrl = import.meta.env.DEV
             ? `/api/cloudflare/client/v4/accounts/${ACCOUNT_ID}/ai/run/${IMAGE_MODEL}`
-            : `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/ai/run/${IMAGE_MODEL}`;
+            : '/api/generate-image';
 
         const response = await fetch(apiUrl, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${API_TOKEN}`,
+                ...(import.meta.env.DEV ? { 'Authorization': `Bearer ${API_TOKEN}` } : {}),
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
@@ -81,14 +67,32 @@ async function generateRoomImage(roomStyle) {
             return null;
         }
 
-        // Stable Diffusion returns raw image bytes
-        const imageBlob = await response.blob();
-        const base64 = await blobToBase64(imageBlob);
-
-        return {
-            data: base64,
-            mimeType: 'image/png'
-        };
+        if (import.meta.env.DEV) {
+            // Dev mode: Stable Diffusion returns raw image bytes via proxy
+            const imageBlob = await response.blob();
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                    const base64 = reader.result.split(',')[1];
+                    resolve({
+                        data: base64,
+                        mimeType: 'image/png'
+                    });
+                };
+                reader.onerror = reject;
+                reader.readAsDataURL(imageBlob);
+            });
+        } else {
+            // Production: Vercel API returns JSON with base64
+            const result = await response.json();
+            if (result.success && result.data) {
+                return {
+                    data: result.data,
+                    mimeType: result.mimeType || 'image/png'
+                };
+            }
+            return null;
+        }
 
     } catch (error) {
         console.error('Image generation failed:', error);
@@ -132,16 +136,17 @@ Berikan rekomendasi dalam format berikut (dalam Bahasa Indonesia):
 
 Berikan saran praktis untuk gaya ${roomStyle}.`;
 
+        // Use Vercel API route in production, Vite proxy in development
         const apiUrl = import.meta.env.DEV
             ? `/api/cloudflare/client/v4/accounts/${ACCOUNT_ID}/ai/run/${VISION_MODEL}`
-            : `https://api.cloudflare.com/client/v4/accounts/${ACCOUNT_ID}/ai/run/${VISION_MODEL}`;
+            : '/api/analyze';
 
         // Run vision analysis and image generation in parallel
         const [visionResponse, generatedImage] = await Promise.all([
             fetch(apiUrl, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${API_TOKEN}`,
+                    ...(import.meta.env.DEV ? { 'Authorization': `Bearer ${API_TOKEN}` } : {}),
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
