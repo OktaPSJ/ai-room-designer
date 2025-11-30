@@ -5,7 +5,10 @@ import { Sparkles, Download, Share2, Image } from 'lucide-react';
 function renderMarkdown(text) {
     if (!text) return '';
 
-    let html = text
+    // Remove [Image #X] placeholders from AI response
+    let cleanText = text.replace(/\[Image #\d+\]/g, '');
+
+    let html = cleanText
         // Escape HTML
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
