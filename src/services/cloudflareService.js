@@ -9,7 +9,7 @@ const IMAGE_MODEL = '@cf/stabilityai/stable-diffusion-xl-base-1.0';
 /**
  * Compress and resize image to reduce payload size
  */
-async function compressImage(file, maxWidth = 800, quality = 0.7) {
+async function compressImage(file, maxWidth = 1200, quality = 0.85) {
     return new Promise((resolve) => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -135,7 +135,7 @@ export async function analyzeRoom(imageFile, roomStyle, customContext = '') {
 
     try {
         // Compress image to reduce payload size
-        const base64Image = await compressImage(imageFile, 800, 0.7);
+        const base64Image = await compressImage(imageFile, 1200, 0.85);
         const imageArray = base64ToUint8Array(base64Image);
 
         const prompt = `Kamu adalah desainer interior profesional. Analisis foto ruangan ini dan berikan saran desain dengan gaya ${roomStyle}.
